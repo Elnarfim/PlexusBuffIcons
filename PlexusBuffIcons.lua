@@ -435,8 +435,6 @@ function PlexusBuffIcons:Reset()
     self:SetNameFilter(false)
 end
 
-local UnitAuraInstanceID = {}
-
 local function showBuffIcon(v, n, setting, icon, count, expires, duration)
     v.BuffIcons[n]:Show()
     v.BuffIcons[n].icon:SetTexture(icon)
@@ -486,7 +484,9 @@ local function showBuffIcon(v, n, setting, icon, count, expires, duration)
                 v.BuffIcons[n].hooked = true
             end
         else
-            self.cdtext:SetText("")
+            if self and self.cdtext then
+                self.cdtext:SetText("")
+            end
         end
         v.BuffIcons[n].cd:SetCooldown(0, 0)
     end
@@ -530,6 +530,8 @@ local function updateFrame(v)
         v.BuffIcons[i]:Hide()
     end
 end
+
+local UnitAuraInstanceID
 local function updateFrame_df(v)
     local n = 1
     local setting = PlexusBuffIcons.db.profile
@@ -574,25 +576,21 @@ local function updateFrame_df(v)
     end
 end
 
+
 function PlexusBuffIcons:UNIT_AURA(_, unitid, updatedAuras)
     if not self.enabled then return end
-    -- if PlexusRoster.GetRaidUnitGUID then
-    -- 	local guid = PlexusRoster:GetRaidUnitGUID(unitid)
-    -- 	if not guid then return end
-    -- 	PlexusFrame:WithGUIDFrames(guid, updateFrame)
-    -- else
-
+    if not unitid then return end
     local guid = UnitGUID(unitid)
-    if not PlexusRoster:IsGUIDInRaid(guid) then return end
+    if not guid then return end
 
-    if unitid then
-        if not UnitAuraInstanceID then
-            UnitAuraInstanceID = {}
-        end
-        if not UnitAuraInstanceID[guid] then
-            UnitAuraInstanceID[guid] = {}
-        end
+    if not UnitAuraInstanceID then
+        UnitAuraInstanceID = {}
     end
+    if not UnitAuraInstanceID[guid] then
+        UnitAuraInstanceID[guid] = {}
+    end
+
+    if not PlexusRoster:IsGUIDInRaid(guid) then return end
 
     if IsRetailWow() then
         local showbuff = PlexusBuffIcons.db.profile.showbuff
@@ -600,9 +598,21 @@ function PlexusBuffIcons:UNIT_AURA(_, unitid, updatedAuras)
         if updatedAuras and updatedAuras.isFullUpdate then
             local unitauraInfo = {}
             if showbuff then
-                ForEachAura(unitid, "HELPFUL", nil, function(aura) unitauraInfo[aura.auraInstanceID] = aura end, true)
+                ForEachAura(unitid, "HELPFUL", nil,
+                    function(aura)
+                        if aura and aura.auraInstanceID then
+                            unitauraInfo[aura.auraInstanceID] = aura
+                        end
+                    end,
+                true)
             else
-                ForEachAura(unitid, "HARMFUL", nil, function(aura) unitauraInfo[aura.auraInstanceID] = aura end, true)
+                ForEachAura(unitid, "HARMFUL", nil,
+                    function(aura)
+                        if aura and aura.auraInstanceID then
+                            unitauraInfo[aura.auraInstanceID] = aura
+                        end
+                    end,
+                true)
             end
 
             UnitAuraInstanceID[guid] = {}
@@ -613,13 +623,6 @@ function PlexusBuffIcons:UNIT_AURA(_, unitid, updatedAuras)
 
         if updatedAuras and updatedAuras.addedAuras then
             for _, addedAuraInfo in pairs(updatedAuras.addedAuras) do
-                if not addedAuraInfo.sourceUnit then
-                    local aurainfo = GetAuraDataByAuraInstanceID(unitid, addedAuraInfo.auraInstanceID)
-                    addedAuraInfo.sourceUnit = aurainfo and aurainfo.sourceUnit
-                end
-                if not UnitAuraInstanceID[guid] then
-                    UnitAuraInstanceID[guid] = {}
-                end
                 if showbuff and addedAuraInfo.isHelpful then
                     UnitAuraInstanceID[guid][addedAuraInfo.auraInstanceID] = addedAuraInfo
                 elseif not showbuff and addedAuraInfo.isHarmful then
@@ -631,21 +634,12 @@ function PlexusBuffIcons:UNIT_AURA(_, unitid, updatedAuras)
 
         if updatedAuras and updatedAuras.updatedAuraInstanceIDs then
             for _, auraInstanceID in ipairs(updatedAuras.updatedAuraInstanceIDs) do
-                local newAura = GetAuraDataByAuraInstanceID(unitid, auraInstanceID)
-                if newAura then
-                    local oldAura = UnitAuraInstanceID[guid] and UnitAuraInstanceID[guid][auraInstanceID]
-                    if UnitAuraInstanceID[guid] and UnitAuraInstanceID[guid][auraInstanceID] then
-                        UnitAuraInstanceID[guid][oldAura.auraInstanceID] = nil
-
-                        if not UnitAuraInstanceID[guid] then
-                            UnitAuraInstanceID[guid] = {}
-                        end
-
-                        if showbuff and newAura and newAura.isHelpful then
-                            UnitAuraInstanceID[guid][newAura.auraInstanceID] = newAura
-                        elseif not showbuff and newAura and newAura.isHarmful then
-                            UnitAuraInstanceID[guid][newAura.auraInstanceID] = newAura
-                        end
+                if UnitAuraInstanceID[guid][auraInstanceID] then
+                    local newAura = GetAuraDataByAuraInstanceID(unitid, auraInstanceID)
+                    if showbuff and newAura and newAura.isHelpful then
+                        UnitAuraInstanceID[guid][newAura.auraInstanceID] = newAura
+                    elseif not showbuff and newAura and newAura.isHarmful then
+                        UnitAuraInstanceID[guid][newAura.auraInstanceID] = newAura
                     end
                 end
             end
@@ -677,11 +671,7 @@ function PlexusBuffIcons:UNIT_AURA(_, unitid, updatedAuras)
 end
 
 function PlexusBuffIcons:UpdateAllUnitsBuffs()
-    if IsRetailWow() then
-        UnitAuraInstanceID = {}
-    end
     for _, unitid in PlexusRoster:IterateRoster() do
         self:UNIT_AURA("UpdateAllUnitsBuffs", unitid)
     end
-    --self:UNIT_AURA("player")
 end
